@@ -1,0 +1,294 @@
+===========================================
+COMANDOS DISPONIBLES EN REGLAS DE AUTOMATISMOS
+===========================================
+
+FORMATO GENERAL DE UNA REGLA
+-------------------------------------------
+Si <CONDICION> entonces <COMANDO1>, <COMANDO2>, ...
+
+También se pueden combinar varias condiciones con AND:
+
+Si <CONDICION1> and <CONDICION2> entonces <COMANDO1>, <COMANDO2>, ...
+
+Ejemplos:
+Si Sensor(1,ON) entonces Switch(10,ON), Switch(20,OFF)
+
+Si Sensor(21,ON) and RailComLocoValido(7) entonces LocoVel(RailComLoco(7),0)
+
+Si Sensor(19,ON) and RailComLocoValido(7) and RailComDir(7,0) entonces LocoVel(RailComLoco(7),15)
+
+
+-------------------------------------------
+CONDICIONES DISPONIBLES
+-------------------------------------------
+
+1) Sensor(addr, estado)
+
+- addr: número de sensor
+- estado: ON / OFF
+
+Ejemplo:
+Si Sensor(5,ON) entonces Switch(100,ON)
+
+
+2) Switch(addr, estado)
+
+- addr: número de desvío
+- estado: ON / OFF
+
+Ejemplo:
+Si Switch(10,ON) entonces Switch(20,OFF)
+
+
+3) RailCom(sensor, dcc, estado)
+
+- sensor: número de sensor RailCom
+- dcc: dirección de locomotora
+- estado: PRESENTE / AUSENTE
+
+Ejemplo:
+Si RailCom(7,1,PRESENTE) entonces Switch(174,ON)
+
+Ejemplo con dirección:
+Si RailCom(7,1,PRESENTE) and RailComDir(7,0) entonces LocoVel(1,15)
+
+
+4) RailComLocoValido(sensor)
+
+- Devuelve verdadero si ese RailCom tiene guardada una locomotora válida
+- Sirve para trabajar con la última locomotora detectada en ese RailCom
+
+Ejemplo:
+Si Sensor(21,ON) and RailComLocoValido(7) entonces LocoVel(RailComLoco(7),0)
+
+Importante:
+RailComLocoValido(sensor) indica que el sistema recuerda una locomotora válida
+para ese RailCom. No significa necesariamente que la locomotora siga presente
+en ese instante, sino que fue detectada y quedó almacenada.
+
+
+5) RailComDir(sensor, direccion)
+
+- Devuelve verdadero si la última locomotora detectada en ese RailCom
+  tiene la dirección indicada
+- direccion: 0 / 1
+
+Ejemplo:
+Si Sensor(19,ON) and RailComLocoValido(7) and RailComDir(7,0) entonces LocoVel(RailComLoco(7),15)
+
+
+6) SensorDireccion(sensor, dcc, direccion)
+
+- Se cumple cuando el sensor indicado está en ON y la locomotora dcc
+  tiene la dirección indicada
+- direccion: 0 / 1
+
+Ejemplo:
+Si SensorDireccion(19,1,0) entonces LocoVel(1,15)
+
+
+7) RailComDireccion(sensor, dcc, estado, direccion)
+
+- Igual que RailCom, pero además comprueba la dirección de la locomotora
+- estado: PRESENTE / AUSENTE
+- direccion: 0 / 1
+
+Ejemplo:
+Si RailComDireccion(7,1,PRESENTE,0) entonces LocoVel(1,15)
+
+
+8) AlActivarGrupo
+
+- Se ejecuta una sola vez en el momento de activar el grupo
+
+Ejemplo:
+Si AlActivarGrupo entonces Switch(174,ON), Switch(175,OFF)
+
+
+9) AlDesactivarGrupo
+
+- Se ejecuta una sola vez en el momento de desactivar el grupo
+
+Ejemplo:
+Si AlDesactivarGrupo entonces Switch(174,OFF), Switch(175,OFF)
+
+
+-------------------------------------------
+COMANDOS DISPONIBLES
+-------------------------------------------
+
+1) Switch(addr, estado)
+
+- Cambia un desvío
+
+Ejemplos:
+Switch(174,ON)
+Switch(175,OFF)
+
+
+2) LocoVel(dcc, velocidad)
+
+- Cambia solo la velocidad de la locomotora
+
+Ejemplos:
+LocoVel(3,40)
+LocoVel(1,0)
+
+También admite una locomotora tomada desde un RailCom:
+
+LocoVel(RailComLoco(7),15)
+LocoVel(RailComLoco(7),0)
+
+Esto permite actuar sobre cualquier locomotora que haya pasado por ese RailCom.
+
+
+3) LocoDir(dcc, direccion)
+
+- Cambia solo la dirección de la locomotora
+- direccion: 0 = atrás, 1 = adelante
+
+Ejemplos:
+LocoDir(3,1)
+LocoDir(RailComLoco(7),0)
+
+
+4) Funcion(dcc, nfun, estado)
+
+- Cambia una función de la locomotora
+
+Ejemplos:
+Funcion(1,0,ON)
+Funcion(RailComLoco(7),0,ON)
+
+
+5) ActivarGrupo(nombre)
+
+- Activa un grupo de reglas
+
+Ejemplo:
+ActivarGrupo(Maniobra)
+
+
+6) DesactivarGrupo(nombre)
+
+- Desactiva un grupo
+
+Ejemplo:
+DesactivarGrupo(Entrada)
+
+
+7) Delay(ms)
+
+- Pausa en milisegundos SOLO para los comandos siguientes de la misma línea
+- NO afecta a otras reglas
+
+Ejemplo:
+Switch(10,ON), Delay(2000), Switch(20,ON)
+
+
+-------------------------------------------
+FUNCIONES ESPECIALES DISPONIBLES EN COMANDOS
+-------------------------------------------
+
+1) RailComLoco(sensor)
+
+- Devuelve la última locomotora detectada en ese RailCom
+- Se usa dentro de LocoVel, LocoDir y Funcion
+
+Ejemplos:
+LocoVel(RailComLoco(7),15)
+LocoVel(RailComLoco(7),0)
+LocoDir(RailComLoco(7),1)
+Funcion(RailComLoco(7),0,ON)
+
+Uso típico:
+Si Sensor(21,ON) and RailComLocoValido(7) entonces LocoVel(RailComLoco(7),0)
+
+
+-------------------------------------------
+CONDICIONES COMPUESTAS CON AND
+-------------------------------------------
+
+Se pueden combinar varias condiciones en una misma regla con AND.
+
+Ejemplo:
+Si Sensor(21,ON) and RailComLocoValido(7) entonces LocoVel(RailComLoco(7),0)
+
+Ejemplo:
+Si Sensor(19,ON) and RailComLocoValido(7) and RailComDir(7,0) entonces LocoVel(RailComLoco(7),15)
+
+Ejemplo:
+Si RailCom(7,1,PRESENTE) and RailComDir(7,0) entonces LocoVel(1,15)
+
+Todas las condiciones unidas con AND deben cumplirse para que se ejecuten los comandos.
+
+
+-------------------------------------------
+EJEMPLOS COMPLETOS
+-------------------------------------------
+
+Ejemplo 1:
+Si Sensor(1,ON) entonces Switch(174,OFF), Switch(200,OFF)
+
+Ejemplo 2:
+Si RailCom(64,1,PRESENTE) entonces Switch(176,ON), LocoVel(2,35)
+
+Ejemplo 3 (con Delay):
+Si Sensor(2,ON) entonces Switch(10,ON), Delay(3000), Switch(20,ON)
+
+Ejemplo 4 (activación de grupos):
+Si Sensor(5,ON) entonces ActivarGrupo(Maniobra)
+
+Ejemplo 5 (desactivación automática):
+Si Sensor(6,ON) entonces DesactivarGrupo(Maniobra)
+
+Ejemplo 6 (varias líneas en un grupo):
+Si Sensor(1,ON) entonces Switch(100,ON)
+Si Sensor(2,ON) entonces Switch(100,OFF)
+Si RailCom(7,1,PRESENTE) entonces ActivarGrupo(Entrada)
+
+Ejemplo 7 (actuar sobre la locomotora detectada por un RailCom):
+Si Sensor(21,ON) and RailComLocoValido(7) entonces LocoVel(RailComLoco(7),0)
+
+Ejemplo 8 (frenar cualquier locomotora en una dirección concreta):
+Si Sensor(19,ON) and RailComLocoValido(7) and RailComDir(7,0) entonces LocoVel(RailComLoco(7),15)
+
+Ejemplo 9 (caso estación, locomotora concreta):
+Si RailCom(7,1,PRESENTE) and RailComDir(7,0) entonces LocoVel(1,15)
+Si Sensor(21,ON) and RailComLocoValido(7) and RailComDir(7,0) entonces LocoVel(RailComLoco(7),0)
+
+Ejemplo 10 (caso estación, cualquier locomotora):
+Si Sensor(19,ON) and RailComLocoValido(7) and RailComDir(7,0) entonces LocoVel(RailComLoco(7),15)
+Si Sensor(21,ON) and RailComLocoValido(7) and RailComDir(7,0) entonces LocoVel(RailComLoco(7),0)
+
+
+-------------------------------------------
+NOTAS IMPORTANTES
+-------------------------------------------
+
+- Cada línea es una regla independiente
+- Se pueden poner varias reglas en un grupo
+- Los comandos se ejecutan en orden
+- Delay solo afecta a los comandos que van después en la misma línea
+- Se pueden usar condiciones compuestas con AND
+- Los grupos deben estar activos para ejecutarse
+- RailComLoco(sensor) usa la última locomotora detectada en ese RailCom
+- RailComDir(sensor,dir) usa la última dirección conocida de esa locomotora
+- RailComLocoValido(sensor) indica que existe una locomotora válida almacenada
+
+
+-------------------------------------------
+BUENAS PRÁCTICAS
+-------------------------------------------
+
+- Usar un grupo por funcionalidad (Entrada, Salida, Maniobra, etc.)
+- Evitar bucles de activación entre grupos
+- Usar Delay para secuencias, no para lógica global
+- Mantener nombres de grupo claros
+- Cuando se trabaje con RailCom, usar RailComLocoValido(sensor)
+  antes de usar RailComLoco(sensor)
+- Si una maniobra depende del sentido de entrada, añadir RailComDir(sensor,dir)
+
+===========================================
+FIN DEL DOCUMENTO
+===========================================
