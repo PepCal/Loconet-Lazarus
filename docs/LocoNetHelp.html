@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>LocoNet Lazarus Components - Ayuda</title>
+<style>
+body { font-family: Arial, sans-serif; margin: 30px; }
+h1 { color: #2c3e50; }
+h2 { color: #34495e; border-bottom: 1px solid #ccc; padding-bottom: 5px; }
+h3 { color: #555; }
+code { background: #f4f4f4; padding: 2px 5px; }
+pre { background: #f4f4f4; padding: 10px; overflow-x: auto; }
+a { text-decoration: none; color: #2980b9; }
+a:hover { text-decoration: underline; }
+.nav { background: #f8f8f8; padding: 15px; border: 1px solid #ddd; }
+</style>
+</head>
+
+<body>
+
+<h1>LocoNet Lazarus Components</h1>
+<p>Documentación de uso de los componentes:</p>
+
+<div class="nav">
+<b>Índice</b>
+<ul>
+<li><a href="#client">TClientLocoNet</a></li>
+<li><a href="#controlLoco">TControlLoco</a></li>
+<li><a href="#controlMaqueta">TControlMaqueta</a></li>
+<li><a href="#modelo">Modelo de Maqueta</a></li>
+<li><a href="#ejemplo">Ejemplo básico</a></li>
+</ul>
+</div>
+
+<hr>
+
+<h2 id="client">TClientLocoNet</h2>
+
+<p>Componente base de comunicación con el servidor LocoNet (TCP).</p>
+
+<h3>Propiedades</h3>
+<ul>
+<li><b>Host</b>: Dirección IP del servidor.</li>
+<li><b>Port</b>: Puerto (por defecto 1234).</li>
+<li><b>TrackPower</b>: Estado de la vía (ON/OFF).</li>
+</ul>
+
+<h3>Eventos</h3>
+<ul>
+<li><b>OnReceive</b>: Línea recibida completa.</li>
+<li><b>OnSensor</b>: Evento de sensor.</li>
+<li><b>OnSwitch</b>: Evento de desvío.</li>
+<li><b>OnLocoSpeed</b>: Cambio de velocidad.</li>
+<li><b>OnLocoDir</b>: Cambio de dirección.</li>
+<li><b>OnLoco</b>: Estado completo locomotora.</li>
+<li><b>OnRailCom</b>: Evento RailCom.</li>
+</ul>
+
+<h3>Métodos principales</h3>
+<ul>
+<li><code>Connect</code></li>
+<li><code>Disconnect</code></li>
+<li><code>SetSwitch(addr, state)</code></li>
+<li><code>SetLocoSpeedByDCC(dcc, speed)</code></li>
+<li><code>SetLocoDirByDCC(dcc, dir)</code></li>
+<li><code>SetLocoFunctionByDCC(dcc, func, state)</code></li>
+</ul>
+
+<hr>
+
+<h2 id="controlLoco">TControlLoco</h2>
+
+<p>Control de una locomotora individual mediante su dirección DCC.</p>
+
+<h3>Propiedades</h3>
+<ul>
+<li><b>Client</b>: Referencia a TClientLocoNet.</li>
+<li><b>DCC</b>: Dirección de locomotora.</li>
+<li><b>Speed</b>: Velocidad actual.</li>
+<li><b>Direction</b>: 0 = atrás, 1 = adelante.</li>
+</ul>
+
+<h3>Eventos</h3>
+<ul>
+<li><b>OnChange</b>: Cambio de velocidad/dirección.</li>
+<li><b>OnFunctionChange</b>: Cambio de una función.</li>
+<li><b>OnFunctionsChange</b>: Cambio global de funciones.</li>
+</ul>
+
+<h3>Métodos</h3>
+<ul>
+<li><code>Stop</code></li>
+<li><code>Forward</code></li>
+<li><code>Backward</code></li>
+<li><code>SetFunction(func, state)</code></li>
+<li><code>GetFunction(func)</code></li>
+<li><code>ClearFunctions</code></li>
+</ul>
+
+<hr>
+
+<h2 id="controlMaqueta">TControlMaqueta</h2>
+
+<p>Gestión completa del estado de la maqueta.</p>
+
+<h3>Propiedades</h3>
+<ul>
+<li><b>LocoNet</b>: Cliente LocoNet asociado.</li>
+<li><b>SwitchDelayMs</b>: Retardo entre órdenes de desvíos.</li>
+<li><b>Zonas</b>: Lista de zonas.</li>
+</ul>
+
+<h3>Eventos</h3>
+<ul>
+<li><b>OnSensor</b></li>
+<li><b>OnSwitch</b></li>
+<li><b>OnRailCom</b></li>
+</ul>
+
+<h3>Métodos</h3>
+<ul>
+<li><code>AddZona(nombre)</code></li>
+<li><code>SetSwitch(addr, state)</code></li>
+</ul>
+
+<p><b>Nota:</b> Los desvíos se envían mediante cola interna con temporizador.</p>
+
+<hr>
+
+<h2 id="modelo">Modelo de Maqueta</h2>
+
+<h3>TElementoMaqueta</h3>
+<ul>
+<li>Representa un elemento del mapa.</li>
+<li>Tipos: sensor, switch, rail, texto, gráfico.</li>
+</ul>
+
+<h3>TZonaMaqueta</h3>
+<ul>
+<li>Contenedor de elementos.</li>
+<li><code>FindByAddr(addr)</code></li>
+</ul>
+
+<hr>
+
+<h2 id="ejemplo">Ejemplo básico</h2>
+
+<pre>
+var
+  client: TClientLocoNet;
+  loco: TControlLoco;
+
+begin
+  client := TClientLocoNet.Create(nil);
+  client.Host := '192.168.1.100';
+  client.Connect;
+
+  loco := TControlLoco.Create(nil);
+  loco.Client := client;
+  loco.DCC := 3;
+
+  loco.Speed := 50;
+  loco.Direction := 1;
+  loco.SetFunction(0, True);
+end;
+</pre>
+
+<hr>
+
+<p><b>Autor:</b> Proyecto LocoNet Lazarus</p>
+
+</body>
+</html>
