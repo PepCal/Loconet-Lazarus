@@ -128,22 +128,6 @@ Funciones limitadas a F0–F8
 Cola de desvíos FIFO simple
 No incluye persistencia de maqueta
 ---
-Estructura del proyecto
-```
-/source
-  ClientLocoNet.pas
-  ControlLoco.pas
-  ControlMaqueta.pas
-  MaquetaModel.pas
-
-/package
-  loconetpkg.lpk
-  loconetpkg.pas
-
-/docs
-  manual.html
-```
----
 Documentación
 Incluye:
 Manual técnico
