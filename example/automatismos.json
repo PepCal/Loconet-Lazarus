@@ -1,0 +1,46 @@
+[
+  {
+    "nombre" : "Estación01_a_Oculto02",
+    "activo" : false,
+    "reglas" : [
+      "Si AlActivarGrupo entonces Switch(96,ON), Switch(85,OFF), Switch(90,OFF), Switch(87,OFF), Switch(95,ON), Switch(93,ON)",
+      "Si AlActivarGrupo entonces LocoDir(RailComLoco(40),0),LocoVel(RailComLoco(40),45), Switch(70,ON), Switch(72,ON), Switch(76,OFF), Switch(71,ON)",
+      "Si Sensor(23,ON) entonces LocoVel(RailComLoco(40),25)",
+      "Si Sensor(25,ON) entonces LocoVel(RailComLoco(3),0),Funcion(RailComLoco(3),0,OFF),DesactivarGrupo(Estación01_a_Oculto02)",
+      "Si RailComEstado(41,PRESENTE) entonces Funcion(RailComLoco(40),0,ON)"
+    ]
+  },
+  {
+    "nombre" : "Estación02_a_Oculto01",
+    "activo" : false,
+    "reglas" : [
+      "Si AlActivarGrupo entonces Switch(96,OFF),Switch(85,OFF),Switch(90,OFF),Switch(87,OFF),Switch(96,OFF),Switch(95,ON),Switch(93,ON)",
+      "Si AlActivarGrupo entonces LocoDir(RailComLoco(44),0),LocoVel(RailComLoco(44),45),Switch(70,ON),Switch(72,ON),Switch(76,ON)",
+      "Si Sensor(22,ON) entonces LocoVel(RailComLoco(44),25)",
+      "Si Sensor(24,ON) entonces LocoVel(RailComLoco(2),0),Funcion(RailComLoco(44),0,OFF),DesactivarGrupo(Estación02_a_Oculto01)",
+      "Si RailComEstado(41,PRESENTE) entonces Funcion(RailComLoco(44),0,ON)"
+    ]
+  },
+  {
+    "nombre" : "Oculto01_a_estación02",
+    "activo" : false,
+    "reglas" : [
+      "Si AlActivarGrupo entonces Switch(82,ON),Switch(81,OFF),Switch(79,OFF),Switch(78,OFF),Switch(83,OFF),Switch(84,OFF),Switch(72,OFF),Switch(70,ON)",
+      "Si AlActivarGrupo entonces LocoDir(RailComLoco(2),0),LocoVel(RailComLoco(2),25),Delay(3000),LocoVel(RailComLoco(2),40),Switch(93,OFF),Switch(94,OFF)",
+      "Si AlActivarGrupo entonces Funcion(RailComLoco(2),0,ON)",
+      "Si RailComEstado(47,PRESENTE) entonces  LocoVel(RailComLoco(2),15), Funcion(RailComLoco(2),0,OFF)",
+      "Si RailComEstado(44,PRESENTE) entonces Delay(3500), LocoVel(RailComLoco(2),0),DesactivarGrupo(Oculto01_a_estación02)"
+    ]
+  },
+  {
+    "nombre" : "Oculto02_a_estación01",
+    "activo" : false,
+    "reglas" : [
+      "Si AlActivarGrupo entonces Switch(81,ON), Switch(79,OFF), Switch(78,OFF), Switch(83,OFF), Switch(84,OFF), Switch(72,OFF), Switch(70,ON)",
+      "Si AlActivarGrupo entonces LocoDir(RailComLoco(3),0),LocoVel(RailComLoco(3),25),Delay(3000),LocoVel(RailComLoco(3),40), Switch(93,OFF), Switch(94,ON)",
+      "Si AlActivarGrupo entonces Funcion(RailComLoco(3),0,ON)",
+      "Si RailComEstado(45,PRESENTE) entonces  LocoVel(RailComLoco(3),15), Funcion(RailComLoco(3),0,OFF)",
+      "Si RailComEstado(40,PRESENTE) entonces Delay(3500), LocoVel(RailComLoco(3),0),DesactivarGrupo(Oculto02_a_estación01)"
+    ]
+  }
+]

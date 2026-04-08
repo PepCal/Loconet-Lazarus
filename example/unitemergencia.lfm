@@ -1,0 +1,16 @@
+object FormEmergencia: TFormEmergencia
+  Left = 50
+  Height = 70
+  Top = 50
+  Width = 70
+  BorderStyle = bsNone
+  Caption = 'Emergencia'
+  Color = clBtnFace
+  OnCreate = FormCreate
+  OnDblClick = FormDblClick
+  OnMouseDown = FormMouseDown
+  OnMouseMove = FormMouseMove
+  OnMouseUp = FormMouseUp
+  OnPaint = FormPaint
+  LCLVersion = '3.2.0.0'
+end
