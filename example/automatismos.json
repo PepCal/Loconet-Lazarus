@@ -1,0 +1,51 @@
+{
+  "version" : 1,
+  "grupos" : [
+    {
+      "nombre" : "Grupo 1",
+      "activo" : false,
+      "reglas" : [
+        {
+          "nombre" : "Regla 1",
+          "condiciones" : [
+            {
+              "uso" : "Condicion",
+              "tipo" : "Sensor",
+              "direccion" : 32,
+              "estado" : true
+            }
+          ],
+          "acciones" : [
+            {
+              "uso" : "Accion",
+              "tipo" : "LocoVel",
+              "dccSource" : "Fixed",
+              "dcc" : 1,
+              "velocidad" : 55
+            }
+          ]
+        },
+        {
+          "nombre" : "Regla 2",
+          "condiciones" : [
+            {
+              "uso" : "Condicion",
+              "tipo" : "Sensor",
+              "direccion" : 42,
+              "estado" : true
+            }
+          ],
+          "acciones" : [
+            {
+              "uso" : "Accion",
+              "tipo" : "LocoVel",
+              "dccSource" : "Fixed",
+              "dcc" : 1,
+              "velocidad" : 55
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

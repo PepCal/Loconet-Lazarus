@@ -1,0 +1,112 @@
+object Form_Principal: TForm_Principal
+  Left = 54
+  Height = 561
+  Top = 325
+  Width = 301
+  Caption = 'Principal'
+  ClientHeight = 561
+  ClientWidth = 301
+  LCLVersion = '4.6.0.0'
+  OnClose = FormClose
+  OnCreate = FormCreate
+  object Button1: TButton
+    Left = 24
+    Height = 64
+    Top = 8
+    Width = 104
+    Caption = 'Conectar'
+    Font.Style = [fsBold]
+    ParentFont = False
+    TabOrder = 0
+    OnClick = Button1Click
+  end
+  object Memo1: TMemo
+    Left = 27
+    Height = 352
+    Top = 80
+    Width = 253
+    ScrollBars = ssAutoVertical
+    TabOrder = 1
+  end
+  object Edit2: TEdit
+    Left = 168
+    Height = 23
+    Top = 8
+    Width = 112
+    TabOrder = 2
+    Text = '192.168.1.46'
+  end
+  object Label1: TLabel
+    Left = 134
+    Height = 15
+    Top = 16
+    Width = 29
+    Caption = 'Host:'
+    Font.Style = [fsBold]
+    ParentFont = False
+  end
+  object Label2: TLabel
+    Left = 136
+    Height = 15
+    Top = 48
+    Width = 27
+    Caption = 'Port:'
+    Font.Style = [fsBold]
+    ParentFont = False
+  end
+  object Edit3: TEdit
+    Left = 168
+    Height = 23
+    Top = 44
+    Width = 48
+    TabOrder = 3
+    Text = '1234'
+  end
+  object Button3: TButton
+    Left = 24
+    Height = 49
+    Top = 440
+    Width = 83
+    Caption = 'Locomotora'
+    Font.Style = [fsBold]
+    ParentFont = False
+    TabOrder = 4
+    OnClick = Button3Click
+  end
+  object Button8: TButton
+    Left = 112
+    Height = 48
+    Top = 441
+    Width = 115
+    Caption = 'Control maqueta'
+    Font.Style = [fsBold]
+    ParentFont = False
+    TabOrder = 5
+    OnClick = Button8Click
+  end
+  object BtnAutomatismos: TButton
+    Left = 27
+    Height = 48
+    Top = 496
+    Width = 117
+    Caption = 'Automatismos'
+    Font.Style = [fsBold]
+    ParentFont = False
+    TabOrder = 6
+    OnClick = BtnAutomatismosClick
+  end
+  object ClientLocoNet1: TClientLocoNet
+    TrackPower = False
+    OnReceive = ClientLocoNet1Receive
+    OnSensor = ClientLocoNet1Sensor
+    OnSwitch = ClientLocoNet1Switch
+    OnSlot = ClientLocoNet1Slot
+    OnLocoSpeed = ClientLocoNet1LocoSpeed
+    OnLocoDir = ClientLocoNet1LocoDir
+    OnRailCom = ClientLocoNet1RailCom
+    OnLocoFunc = ClientLocoNet1LocoFunc
+    OnLocoFuncs = ClientLocoNet1LocoFuncs
+    Left = 32
+    Top = 16
+  end
+end

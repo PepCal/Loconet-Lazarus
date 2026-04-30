@@ -1,0 +1,8 @@
+object FormAutomatizacionVisual: TFormAutomatizacionVisual
+  Left = 200
+  Height = 444
+  Top = 200
+  Width = 972
+  Caption = 'Automatización visual'
+  LCLVersion = '4.6.0.0'
+end

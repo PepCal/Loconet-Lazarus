@@ -1,0 +1,38 @@
+{
+  "version" : 1,
+  "grupos" : [
+    {
+      "nombre" : "Grupo 1",
+      "activo" : true,
+      "reglas" : [
+        {
+          "nombre" : "Regla 1",
+          "condiciones" : [
+            {
+              "tipo" : "Sensor",
+              "uso" : "Condicion",
+              "direccion" : 23,
+              "estado" : true,
+              "dcc" : 0,
+              "velocidad" : 0,
+              "grupo" : "",
+              "descripcion" : "Descripción"
+            }
+          ],
+          "acciones" : [
+            {
+              "tipo" : "Switch",
+              "uso" : "Accion",
+              "direccion" : 0,
+              "estado" : true,
+              "dcc" : 0,
+              "velocidad" : 0,
+              "grupo" : "",
+              "descripcion" : ""
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
