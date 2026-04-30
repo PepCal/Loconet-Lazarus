@@ -1,0 +1,75 @@
+{
+  "version" : 1,
+  "grupos" : [
+    {
+      "nombre" : "Salida estación",
+      "activo" : true,
+      "reglas" : [
+        {
+          "nombre" : "Desvíos",
+          "condiciones" : [
+            {
+              "tipo" : "Sensor",
+              "uso" : "Condicion",
+              "direccion" : 12,
+              "estado" : true,
+              "dcc" : 0,
+              "velocidad" : 0,
+              "grupo" : "",
+              "descripcion" : "Salida estación"
+            }
+          ],
+          "acciones" : [
+            {
+              "tipo" : "Switch",
+              "uso" : "Accion",
+              "direccion" : 200,
+              "estado" : true,
+              "dcc" : 0,
+              "velocidad" : 0,
+              "grupo" : "",
+              "descripcion" : "Desvío B estación"
+            },
+            {
+              "tipo" : "Switch",
+              "uso" : "Accion",
+              "direccion" : 201,
+              "estado" : false,
+              "dcc" : 0,
+              "velocidad" : 0,
+              "grupo" : "",
+              "descripcion" : "Desvío B estación"
+            }
+          ]
+        },
+        {
+          "nombre" : "Semáforos",
+          "condiciones" : [
+            {
+              "tipo" : "AlActivarGrupo",
+              "uso" : "Condicion",
+              "direccion" : 0,
+              "estado" : true,
+              "dcc" : 0,
+              "velocidad" : 0,
+              "grupo" : "",
+              "descripcion" : ""
+            }
+          ],
+          "acciones" : [
+            {
+              "tipo" : "Switch",
+              "uso" : "Accion",
+              "direccion" : 300,
+              "estado" : true,
+              "dcc" : 0,
+              "velocidad" : 0,
+              "grupo" : "",
+              "descripcion" : "Semáforo A estación a verde"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
