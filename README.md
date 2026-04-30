@@ -113,7 +113,7 @@ Control de maqueta
 `OnSwitch`
 `OnRailCom`
 ---
-aracterísticas técnicas
+Características técnicas
 ✔ LocoNet sobre TCP (compatible con JMRI)
 ✔ Decodificación de opcodes (A0, A1, A2, B0, B2, E7, D0)
 ✔ Gestión automática de slots
