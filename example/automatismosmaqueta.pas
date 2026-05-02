@@ -1243,6 +1243,17 @@ begin
         end;
 
         Log(Format('LOCO DIR DCC=%d DIR=%d', [DCCResuelto, Cmd.Direccion]));
+
+        { Al ejecutar una orden de direccion desde una regla no siempre vuelve
+          un evento LN_LocoDir/LN_Loco desde la central. Actualizamos tambien
+          el estado local del motor, igual que si hubiese llegado el eco. }
+        if DCCEnRango(DCCResuelto) then
+        begin
+          FLocoDir[DCCResuelto] := Cmd.Direccion;
+          FLocoDirKnown[DCCResuelto] := True;
+          FDirRequestPending[DCCResuelto] := False;
+        end;
+
         if Assigned(FOnEjecutarLocoDir) then
           FOnEjecutarLocoDir(Self, DCCResuelto, Cmd.Direccion);
       end;
@@ -1315,9 +1326,13 @@ begin
                 (FRailComInfo[C.Sensor].Dir = C.Dir);
 
     tcRailComLocoValido:
+      // Condición de presencia física: no compara la dirección DCC.
+      // TRUE sólo si el último estado recibido para este RailCom indica
+      // una locomotora presente. Si el RailCom notifica ausencia, pasa a FALSE.
       Result := SensorEnRango(C.Sensor) and
-                FRailComInfo[C.Sensor].HayLoco and
-                (FRailComInfo[C.Sensor].Loco > 0);
+                FRailComInfo[C.Sensor].HasCurrent and
+                FRailComInfo[C.Sensor].CurrentPresent and
+                (FRailComInfo[C.Sensor].CurrentDCC > 0);
 
     tcRailComDirActual:
       Result := SensorEnRango(C.Sensor) and
@@ -1415,7 +1430,19 @@ begin
       FRailComInfo[Sensor].HayDir := True;
     end
     else
+    begin
+      FRailComInfo[Sensor].HayDir := False;
       RequestDireccionSiNecesaria(DCC);
+    end;
+  end
+  else
+  begin
+    // El RailCom queda vacío o sin DCC válido: no debe conservarse
+    // la última locomotora como si siguiera presente.
+    FRailComInfo[Sensor].Loco := 0;
+    FRailComInfo[Sensor].HayLoco := False;
+    FRailComInfo[Sensor].Dir := 0;
+    FRailComInfo[Sensor].HayDir := False;
   end;
 end;
 

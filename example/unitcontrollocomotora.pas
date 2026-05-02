@@ -67,6 +67,7 @@ type
     procedure EnviarFuncionDesdeCheck(CB: TCheckBox; FuncNo: Integer);
     function GetDCCSeleccionada: Integer;
     procedure RefrescarFuncionesDesdeCliente;
+    procedure PintarDireccion(Dir: Integer);
   public
   end;
 
@@ -239,6 +240,27 @@ begin
   Form2 := nil;
 end;
 
+procedure TForm2.PintarDireccion(Dir: Integer);
+begin
+  PArriba.ParentColor := False;
+  PAbajo.ParentColor := False;
+
+  if Dir = 1 then
+  begin
+    PArriba.Color := clLime;
+    PAbajo.Color := clBtnFace;
+  end
+  else
+  begin
+    PArriba.Color := clBtnFace;
+    PAbajo.Color := clLime;
+  end;
+
+  PArriba.Repaint;
+  PAbajo.Repaint;
+  PBotonesDireccion.Repaint;
+end;
+
 procedure TForm2.ControlLoco1Change(Sender: TObject; Speed: Integer; Dir: Integer);
 begin
   FUpdatingUI := True;
@@ -247,17 +269,7 @@ begin
       TrackBarSpeed.Position := Speed;
 
     LabelVelocidad.Caption := IntToStr(Speed);
-
-    if Dir = 1 then
-    begin
-      PArriba.Color := clLime;
-      PAbajo.Color := clDefault;
-    end
-    else
-    begin
-      PAbajo.Color := clLime;
-      PArriba.Color := clDefault;
-    end;
+    PintarDireccion(Dir);
   finally
     FUpdatingUI := False;
   end;

@@ -1081,6 +1081,13 @@ begin
           Format('Si RailComDir(%d,1)', [E.Addr]),
           Format('RailComDir(%d,1)', [E.Addr]),
           False);
+
+        // Ejecución: usar la locomotora detectada por este RailCom como dirección DCC.
+        EjecMenu := AddSubMenu(Root, 'Ejecución con locomotora RailCom');
+        AddItem(EjecMenu,
+          Format('LocoVel(RailComLoco(%d),0)', [E.Addr]),
+          Format('LocoVel(RailComLoco(%d),0)', [E.Addr]),
+          True);
       end;
 
     etSwitch:

@@ -18,6 +18,7 @@ type
     tbvAlActivarGrupo,
     tbvAlDesactivarGrupo,
     tbvLocomotora,
+    tbvLocomotoraDir,
     tbvDelay,
     tbvActivarGrupo,
     tbvDesactivarGrupo
@@ -35,7 +36,10 @@ type
     Direccion: Integer;
     Estado: Boolean;
     DCC: Integer;
+    UsarRailComLoco: Boolean;
+    DCCTexto: string;
     Velocidad: Integer;
+    LocoDireccion: Integer;
     Grupo: string;
     Descripcion: string;
 
@@ -110,6 +114,8 @@ type
     LblDireccion: TLabel;
     EdDireccion: TEdit;
     ChkEstado: TCheckBox;
+    LblOrigenLoco: TLabel;
+    CbOrigenLoco: TComboBox;
     LblDCC: TLabel;
     EdDCC: TEdit;
     LblVelocidad: TLabel;
@@ -238,6 +244,7 @@ begin
     tbvAlActivarGrupo: Result := 'AlActivarGrupo';
     tbvAlDesactivarGrupo: Result := 'AlDesactivarGrupo';
     tbvLocomotora: Result := 'Locomotora';
+    tbvLocomotoraDir: Result := 'LocomotoraDir';
     tbvDelay: Result := 'Delay';
     tbvActivarGrupo: Result := 'ActivarGrupo';
     tbvDesactivarGrupo: Result := 'DesactivarGrupo';
@@ -256,6 +263,7 @@ begin
   else if SameText(S, 'AlActivarGrupo') then Result := tbvAlActivarGrupo
   else if SameText(S, 'AlDesactivarGrupo') then Result := tbvAlDesactivarGrupo
   else if SameText(S, 'Locomotora') then Result := tbvLocomotora
+  else if SameText(S, 'LocomotoraDir') then Result := tbvLocomotoraDir
   else if SameText(S, 'Delay') then Result := tbvDelay
   else if SameText(S, 'ActivarGrupo') then Result := tbvActivarGrupo
   else if SameText(S, 'DesactivarGrupo') then Result := tbvDesactivarGrupo
@@ -284,7 +292,10 @@ begin
   Direccion := 0;
   Estado := True;
   DCC := 0;
+  UsarRailComLoco := False;
+  DCCTexto := '';
   Velocidad := 0;
+  LocoDireccion := 0;
   Grupo := '';
   Descripcion := '';
 end;
@@ -317,7 +328,20 @@ begin
       Result := 'Al desactivar grupo';
 
     tbvLocomotora:
-      Result := Format('Loco DCC %d vel %d', [DCC, Velocidad]);
+      begin
+        if UsarRailComLoco or (Trim(DCCTexto) <> '') then
+          Result := Format('Loco RailCom sensor %d vel %d', [DCC, Velocidad])
+        else
+          Result := Format('Loco DCC %d vel %d', [DCC, Velocidad]);
+      end;
+
+    tbvLocomotoraDir:
+      begin
+        if UsarRailComLoco or (Trim(DCCTexto) <> '') then
+          Result := Format('Loco RailCom sensor %d dir %d', [DCC, LocoDireccion])
+        else
+          Result := Format('Loco DCC %d dir %d', [DCC, LocoDireccion]);
+      end;
 
     tbvDelay:
       Result := Format('Delay %d ms', [Velocidad]);
@@ -369,7 +393,20 @@ begin
       Result := 'AlDesactivarGrupo';
 
     tbvLocomotora:
-      Result := Format('LocoVel(%d,%d)', [DCC, Velocidad]);
+      begin
+        if UsarRailComLoco or (Trim(DCCTexto) <> '') then
+          Result := Format('LocoVel(RailComLoco(%d),%d)', [DCC, Velocidad])
+        else
+          Result := Format('LocoVel(%d,%d)', [DCC, Velocidad]);
+      end;
+
+    tbvLocomotoraDir:
+      begin
+        if UsarRailComLoco or (Trim(DCCTexto) <> '') then
+          Result := Format('LocoDir(RailComLoco(%d),%d)', [DCC, LocoDireccion])
+        else
+          Result := Format('LocoDir(%d,%d)', [DCC, LocoDireccion]);
+      end;
 
     tbvDelay:
       Result := Format('Delay(%d)', [Velocidad]);
@@ -393,9 +430,13 @@ begin
   Result.Add('direccion', Direccion);
   Result.Add('estado', Estado);
   Result.Add('dcc', DCC);
+  Result.Add('usarRailComLoco', UsarRailComLoco);
+  Result.Add('dccTexto', DCCTexto);
   Result.Add('velocidad', Velocidad);
+  Result.Add('locoDireccion', LocoDireccion);
   Result.Add('grupo', Grupo);
   Result.Add('descripcion', Descripcion);
+  Result.Add('texto', TextoRegla);
 end;
 
 procedure TBloqueVisual.FromJSON(AObj: TJSONObject);
@@ -405,7 +446,23 @@ begin
   Direccion := AObj.Get('direccion', 0);
   Estado := AObj.Get('estado', True);
   DCC := AObj.Get('dcc', 0);
+  UsarRailComLoco := AObj.Get('usarRailComLoco', False);
+  DCCTexto := AObj.Get('dccTexto', '');
+  if Trim(DCCTexto) <> '' then
+    UsarRailComLoco := True;
+  if UsarRailComLoco and (Trim(DCCTexto) = '') then
+    DCCTexto := Format('RailComLoco(%d)', [DCC]);
   Velocidad := AObj.Get('velocidad', 0);
+  LocoDireccion := AObj.Get('locoDireccion', 0);
+  if Pos('RailComLoco(', Trim(DCCTexto)) = 1 then
+    UsarRailComLoco := True;
+
+  if (DCC = 0) and (Pos('RailComLoco(', Trim(DCCTexto)) = 1) then
+  begin
+    DCC := StrToIntDef(
+      Copy(Trim(DCCTexto), Length('RailComLoco(') + 1,
+        Pos(')', Trim(DCCTexto)) - Length('RailComLoco(') - 1), 0);
+  end;
   Grupo := AObj.Get('grupo', '');
   Descripcion := AObj.Get('descripcion', AObj.Get('nombreVisible', ''));
 end;
@@ -891,16 +948,33 @@ begin
   ChkEstado.Top := 220;
   ChkEstado.OnChange := @PropiedadChange;
 
+  LblOrigenLoco := TLabel.Create(Self);
+  LblOrigenLoco.Parent := PanelPropiedades;
+  LblOrigenLoco.Caption := 'Origen direcci贸n locomotora';
+  LblOrigenLoco.Left := 10;
+  LblOrigenLoco.Top := 220;
+
+  CbOrigenLoco := TComboBox.Create(Self);
+  CbOrigenLoco.Parent := PanelPropiedades;
+  CbOrigenLoco.Left := 10;
+  CbOrigenLoco.Top := 240;
+  CbOrigenLoco.Width := 230;
+  CbOrigenLoco.Style := csDropDownList;
+  CbOrigenLoco.Items.Add('DCC fijo');
+  CbOrigenLoco.Items.Add('Valor le铆do por RailCom');
+  CbOrigenLoco.ItemIndex := 0;
+  CbOrigenLoco.OnChange := @PropiedadChange;
+
   LblDCC := TLabel.Create(Self);
   LblDCC.Parent := PanelPropiedades;
-  LblDCC.Caption := 'DCC / direcci贸n';
+  LblDCC.Caption := 'DCC / sensor RailCom';
   LblDCC.Left := 10;
-  LblDCC.Top := 255;
+  LblDCC.Top := 275;
 
   EdDCC := TEdit.Create(Self);
   EdDCC.Parent := PanelPropiedades;
   EdDCC.Left := 10;
-  EdDCC.Top := 275;
+  EdDCC.Top := 295;
   EdDCC.Width := 230;
   EdDCC.OnChange := @PropiedadChange;
 
@@ -908,12 +982,12 @@ begin
   LblVelocidad.Parent := PanelPropiedades;
   LblVelocidad.Caption := 'Velocidad / delay ms';
   LblVelocidad.Left := 10;
-  LblVelocidad.Top := 310;
+  LblVelocidad.Top := 330;
 
   EdVelocidad := TEdit.Create(Self);
   EdVelocidad.Parent := PanelPropiedades;
   EdVelocidad.Left := 10;
-  EdVelocidad.Top := 330;
+  EdVelocidad.Top := 350;
   EdVelocidad.Width := 230;
   EdVelocidad.OnChange := @PropiedadChange;
 
@@ -921,12 +995,12 @@ begin
   LblGrupo.Parent := PanelPropiedades;
   LblGrupo.Caption := 'Grupo';
   LblGrupo.Left := 10;
-  LblGrupo.Top := 365;
+  LblGrupo.Top := 385;
 
   EdGrupo := TEdit.Create(Self);
   EdGrupo.Parent := PanelPropiedades;
   EdGrupo.Left := 10;
-  EdGrupo.Top := 385;
+  EdGrupo.Top := 405;
   EdGrupo.Width := 230;
   EdGrupo.OnChange := @PropiedadChange;
 
@@ -978,7 +1052,8 @@ begin
 
   y := 8;
   CrearBotonPaleta(ScrollAccion, 'Switch', tbvSwitch, ubvAccion, y, COLOR_ACCION); Inc(y, 45);
-  CrearBotonPaleta(ScrollAccion, 'Locomotora', tbvLocomotora, ubvAccion, y, COLOR_ACCION); Inc(y, 45);
+  CrearBotonPaleta(ScrollAccion, 'Locomotora velocidad', tbvLocomotora, ubvAccion, y, COLOR_ACCION); Inc(y, 45);
+  CrearBotonPaleta(ScrollAccion, 'Locomotora direcci贸n', tbvLocomotoraDir, ubvAccion, y, COLOR_ACCION); Inc(y, 45);
   CrearBotonPaleta(ScrollAccion, 'Delay', tbvDelay, ubvAccion, y, COLOR_ACCION); Inc(y, 45);
   CrearBotonPaleta(ScrollAccion, 'Activar grupo', tbvActivarGrupo, ubvAccion, y, COLOR_ACCION); Inc(y, 45);
   CrearBotonPaleta(ScrollAccion, 'Desactivar grupo', tbvDesactivarGrupo, ubvAccion, y, COLOR_ACCION);
@@ -1038,6 +1113,7 @@ begin
   ScrollAccion.Enabled := Editable;
 
   EdDescripcion.Enabled := Editable;
+  CbOrigenLoco.Enabled := Editable;
   EdDireccion.Enabled := Editable;
   ChkEstado.Enabled := Editable;
   EdDCC.Enabled := Editable;
@@ -1555,10 +1631,29 @@ begin
     end;
 
     case ABloque.Tipo of
-      tbvRailCom, tbvRailComDir, tbvLocomotora:
+      tbvRailCom, tbvRailComDir:
       begin
         LblDCC.Visible := True;
         EdDCC.Visible := True;
+        LblDCC.Caption := 'DCC';
+        EdDCC.Text := IntToStr(ABloque.DCC);
+      end;
+
+      tbvLocomotora, tbvLocomotoraDir:
+      begin
+        LblOrigenLoco.Visible := True;
+        CbOrigenLoco.Visible := True;
+        if ABloque.UsarRailComLoco or (Trim(ABloque.DCCTexto) <> '') then
+          CbOrigenLoco.ItemIndex := 1
+        else
+          CbOrigenLoco.ItemIndex := 0;
+
+        LblDCC.Visible := True;
+        EdDCC.Visible := True;
+        if CbOrigenLoco.ItemIndex = 1 then
+          LblDCC.Caption := 'Sensor RailCom'
+        else
+          LblDCC.Caption := 'DCC fijo';
         EdDCC.Text := IntToStr(ABloque.DCC);
       end;
     end;
@@ -1568,7 +1663,19 @@ begin
       begin
         LblVelocidad.Visible := True;
         EdVelocidad.Visible := True;
+        if ABloque.Tipo = tbvDelay then
+          LblVelocidad.Caption := 'Delay ms'
+        else
+          LblVelocidad.Caption := 'Velocidad';
         EdVelocidad.Text := IntToStr(ABloque.Velocidad);
+      end;
+
+      tbvLocomotoraDir:
+      begin
+        LblVelocidad.Visible := True;
+        EdVelocidad.Visible := True;
+        LblVelocidad.Caption := 'Direcci贸n locomotora (0/1)';
+        EdVelocidad.Text := IntToStr(ABloque.LocoDireccion);
       end;
     end;
 
@@ -1598,6 +1705,9 @@ begin
 
   ChkEstado.Visible := False;
 
+  LblOrigenLoco.Visible := False;
+  CbOrigenLoco.Visible := False;
+
   LblDCC.Visible := False;
   EdDCC.Visible := False;
 
@@ -1626,10 +1736,34 @@ begin
     BloqueSeleccionado.Estado := ChkEstado.Checked;
 
   if EdDCC.Visible then
+  begin
     BloqueSeleccionado.DCC := StrToIntDef(EdDCC.Text, 0);
 
+    if (BloqueSeleccionado.Tipo = tbvLocomotora) or
+       (BloqueSeleccionado.Tipo = tbvLocomotoraDir) then
+    begin
+      if CbOrigenLoco.ItemIndex = 1 then
+      begin
+        BloqueSeleccionado.UsarRailComLoco := True;
+        BloqueSeleccionado.DCCTexto := Format('RailComLoco(%d)', [BloqueSeleccionado.DCC]);
+        LblDCC.Caption := 'Sensor RailCom';
+      end
+      else
+      begin
+        BloqueSeleccionado.UsarRailComLoco := False;
+        BloqueSeleccionado.DCCTexto := '';
+        LblDCC.Caption := 'DCC fijo';
+      end;
+    end;
+  end;
+
   if EdVelocidad.Visible then
-    BloqueSeleccionado.Velocidad := StrToIntDef(EdVelocidad.Text, 0);
+  begin
+    if BloqueSeleccionado.Tipo = tbvLocomotoraDir then
+      BloqueSeleccionado.LocoDireccion := StrToIntDef(EdVelocidad.Text, 0)
+    else
+      BloqueSeleccionado.Velocidad := StrToIntDef(EdVelocidad.Text, 0);
+  end;
 
   if EdGrupo.Visible then
     BloqueSeleccionado.Grupo := EdGrupo.Text;
@@ -1688,6 +1822,9 @@ begin
       Result := 'icono_grupo_off.png';
 
     tbvLocomotora:
+      Result := 'icono_locomotora.png';
+
+    tbvLocomotoraDir:
       Result := 'icono_locomotora.png';
 
     tbvDelay:
@@ -1926,6 +2063,28 @@ var
   B: TBloqueVisual;
   G: TGrupoVisual;
   R: TReglaVisual;
+
+  function EsSensorRailComDeLaRegla(ASensor: Integer): Boolean;
+  var
+    I: Integer;
+    C: TBloqueVisual;
+  begin
+    Result := False;
+    if (AUso <> ubvAccion) or (ReglaSeleccionada = nil) then Exit;
+
+    for I := 0 to ReglaSeleccionada.Condiciones.Count - 1 do
+    begin
+      C := TBloqueVisual(ReglaSeleccionada.Condiciones[I]);
+      if ((C.Tipo = tbvRailCom) or
+          (C.Tipo = tbvRailComValido) or
+          (C.Tipo = tbvRailComDir)) and
+         (C.Direccion = ASensor) then
+      begin
+        Result := True;
+        Exit;
+      end;
+    end;
+  end;
 begin
   if not EdicionReglasPermitida(True) then Exit;
   S := LimpiarTextoMapaLocal(ATexto);
@@ -2004,8 +2163,57 @@ begin
   else if Pos('LocoVel(', S) = 1 then
   begin
     B := TBloqueVisual.Create(tbvLocomotora, AUso);
-    B.DCC := StrToIntDef(P1, 0);
+    if Pos('RailComLoco(', Trim(P1)) = 1 then
+    begin
+      // La direcci贸n DCC no es fija: se resolver谩 en ejecuci贸n con el 煤ltimo DCC le铆do por este sensor RailCom.
+      B.DCC := StrToIntDef(ExtraerEntreParentesisLocal(Trim(P1)), 0);
+      B.UsarRailComLoco := True;
+      B.DCCTexto := Format('RailComLoco(%d)', [B.DCC]);
+    end
+    else
+    begin
+      B.DCC := StrToIntDef(P1, 0);
+      if EsSensorRailComDeLaRegla(B.DCC) then
+      begin
+        // Viene de una condici髇 RailCom de la misma regla: el n鷐ero es el sensor RailCom,
+        // no la direcci髇 DCC fija de la locomotora.
+        B.UsarRailComLoco := True;
+        B.DCCTexto := Format('RailComLoco(%d)', [B.DCC]);
+      end
+      else
+      begin
+        B.UsarRailComLoco := False;
+        B.DCCTexto := '';
+      end;
+    end;
     B.Velocidad := StrToIntDef(P2, 0);
+  end
+  else if Pos('LocoDir(', S) = 1 then
+  begin
+    B := TBloqueVisual.Create(tbvLocomotoraDir, AUso);
+    if Pos('RailComLoco(', Trim(P1)) = 1 then
+    begin
+      B.DCC := StrToIntDef(ExtraerEntreParentesisLocal(Trim(P1)), 0);
+      B.UsarRailComLoco := True;
+      B.DCCTexto := Format('RailComLoco(%d)', [B.DCC]);
+    end
+    else
+    begin
+      B.DCC := StrToIntDef(P1, 0);
+      if EsSensorRailComDeLaRegla(B.DCC) then
+      begin
+        // Viene de una condici髇 RailCom de la misma regla: el n鷐ero es el sensor RailCom,
+        // no la direcci髇 DCC fija de la locomotora.
+        B.UsarRailComLoco := True;
+        B.DCCTexto := Format('RailComLoco(%d)', [B.DCC]);
+      end
+      else
+      begin
+        B.UsarRailComLoco := False;
+        B.DCCTexto := '';
+      end;
+    end;
+    B.LocoDireccion := StrToIntDef(P2, 0);
   end
   else if Pos('Delay(', S) = 1 then
   begin

@@ -432,11 +432,18 @@ end;
 procedure TFormAutomatismos.MotorEjecutarLocoDir(Sender: TObject; DCC, Direccion: Integer);
 begin
   Log(Format('LOCO DIR DCC=%d DIR=%d', [DCC, Direccion]));
+
   if not Assigned(FClient) then
   begin
     Log('ERROR: ClientLocoNet no asignado.');
     Exit;
   end;
+
+  {
+    La direccion se envia por el mismo cliente que la velocidad.
+    La actualizacion visual debe llegar por el evento LN_LocoDir del cliente,
+    igual que la velocidad llega por LN_LocoSpeed.
+  }
   FClient.SetLocoDirByDCC(DCC, Direccion);
 end;
 
