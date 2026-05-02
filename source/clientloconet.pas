@@ -819,15 +819,22 @@ begin
           if (dirf and LN_DIRF_F4) <> 0 then FSlots[slot].Funcs := FSlots[slot].Funcs or FuncBit(4)
                                        else FSlots[slot].Funcs := FSlots[slot].Funcs and not FuncBit(4);
 
-          if dir <> FSlots[slot].Dir then
-          begin
-            if Assigned(FOnLocoDir) then
-              FOnLocoDir(Self, slot, dcc, FSlots[slot].Dir);
+          {
+            Notificar siempre el estado de dirección recibido desde la central.
 
-            for j := 0 to FListeners.Count - 1 do
-              if TObject(FListeners[j]) is TLocoNetListener then
-                TLocoNetListener(FListeners[j]).LN_LocoDir(slot, dcc, FSlots[slot].Dir);
-          end;
+            Motivo: SetLocoDir actualiza FSlots[slot].Dir antes de enviar el
+            paquete $A1 para poder construir DIRF. Cuando vuelve el eco de la
+            central, la comparación contra la caché puede indicar falsamente
+            que no hay cambio y entonces no se actualiza el TControlLoco
+            visible. La velocidad no tenía este problema porque $A0 notificaba
+            siempre.
+          }
+          if Assigned(FOnLocoDir) then
+            FOnLocoDir(Self, slot, dcc, FSlots[slot].Dir);
+
+          for j := 0 to FListeners.Count - 1 do
+            if TObject(FListeners[j]) is TLocoNetListener then
+              TLocoNetListener(FListeners[j]).LN_LocoDir(slot, dcc, FSlots[slot].Dir);
 
           newFuncs := FSlots[slot].Funcs;
           NotifyFunctionChanges(slot, dcc, oldFuncs, newFuncs);
