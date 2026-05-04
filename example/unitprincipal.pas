@@ -106,7 +106,8 @@ uses
   unitControlLocomotora,
   unitcontrolmaqueta,
   unitEmergencia,
-  UnitAutomatismos;
+  UnitAutomatismos,
+  unitautomatizacionvisual;
 
 {$R *.lfm}
 
@@ -156,21 +157,26 @@ end;
 
 procedure TForm_Principal.BtnAutomatismosClick(Sender: TObject);
 begin
-  // Inicialización del formulario de control de maqueta si no existe
+  // Crear/controlar formulario de maqueta
   if not Assigned(Form_ControlMaqueta) then
   begin
     Form_ControlMaqueta := TForm_ControlMaqueta.Create(Application);
     Form_ControlMaqueta.ControlMaqueta1.LocoNet := ClientLocoNet1;
   end;
 
-  // Inicialización del formulario de automatismos
-  if not Assigned(FormAutomatismos) then
-    FormAutomatismos := TFormAutomatismos.Create(Application);
+  // Crear formulario visual
+  if not Assigned(FormAutomatizacionVisual) then
+    FormAutomatizacionVisual := TFormAutomatizacionVisual.Create(Application);
 
-  // Enlace del control de maqueta con automatismos
-  FormAutomatismos.Control := Form_ControlMaqueta.ControlMaqueta1;
+  // Pasar el control de maqueta al formulario visual
+  FormAutomatizacionVisual.Control := Form_ControlMaqueta.ControlMaqueta1;
 
-  FormAutomatismos.Show;
+  // Mostrar primero el formulario visual
+  FormAutomatizacionVisual.Show;
+  FormAutomatizacionVisual.BringToFront;
+
+  // Arrancar el motor desde el propio formulario visual
+  FormAutomatizacionVisual.EjecutarMotorDesdeExterno;
 end;
 
 procedure TForm_Principal.Button3Click(Sender: TObject);

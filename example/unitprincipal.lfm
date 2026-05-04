@@ -1,11 +1,11 @@
 object Form_Principal: TForm_Principal
   Left = 180
-  Height = 561
+  Height = 563
   Top = 337
-  Width = 301
+  Width = 293
   Caption = 'Principal'
-  ClientHeight = 561
-  ClientWidth = 301
+  ClientHeight = 563
+  ClientWidth = 293
   LCLVersion = '4.6.0.0'
   OnClose = FormClose
   OnCreate = FormCreate

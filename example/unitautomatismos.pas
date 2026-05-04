@@ -18,6 +18,7 @@ type
     BBorrarEventos: TButton;
     MemoLog: TMemo;
     procedure BBorrarEventosClick(Sender: TObject);
+    procedure FormCloseQuery(Sender: TObject; var CanClose: Boolean);
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
   private
@@ -25,6 +26,7 @@ type
     FControl: TControlMaqueta;
     FClient: TClientLocoNet;
     FAuxControlLoco: TControlLoco;
+    FMotorEjecutando: Boolean;
 
     procedure Log(const S: string);
     procedure SetControl(AControl: TControlMaqueta);
@@ -53,6 +55,8 @@ type
     procedure RecargarDesdeVisualJSON;
     procedure PrepararModoEjecucion;
     procedure PararEjecucion;
+    function MotorEnEjecucion: Boolean;
+    function ProbarAccionTexto(const TextoComando: string): Boolean;
     function GetContextoCursorRegla: TContextoRegla;
   end;
 
@@ -122,8 +126,8 @@ end;
 
 function TFormAutomatismos.BloqueVisualJSONATexto(AObj: TJSONObject): string;
 var
-  Tipo, Texto, Grupo, EstadoTxt: string;
-  Direccion, DCC, Velocidad, FuncNum: Integer;
+  Tipo, Texto, Grupo, EstadoTxt, DireccionTexto: string;
+  Direccion, DCC, Velocidad, DelayMax, FuncNum, AudioVolume: Integer;
   Estado: Boolean;
 begin
   Result := '';
@@ -138,18 +142,25 @@ begin
 
   Tipo := Trim(AObj.Get('tipo', ''));
   Direccion := AObj.Get('direccion', AObj.Get('addr', 0));
+  DireccionTexto := Trim(AObj.Get('direccionTexto', ''));
+  if DireccionTexto = '' then DireccionTexto := IntToStr(Direccion);
   DCC := AObj.Get('dcc', 0);
-  Velocidad := AObj.Get('velocidad', AObj.Get('valor', 0));
+  Velocidad := AObj.Get('delayMin', AObj.Get('velocidad', AObj.Get('valor', 0)));
+  DelayMax := AObj.Get('delayMax', Velocidad);
+  if DelayMax <= 0 then DelayMax := Velocidad;
   FuncNum := AObj.Get('funcion', AObj.Get('funcnum', 0));
   Estado := AObj.Get('estado', True);
   Grupo := Trim(AObj.Get('grupo', ''));
+  AudioVolume := AObj.Get('audioVolume', 100);
+  if AudioVolume < 0 then AudioVolume := 0;
+  if AudioVolume > 100 then AudioVolume := 100;
 
   if Estado then EstadoTxt := 'ON' else EstadoTxt := 'OFF';
 
   if SameText(Tipo, 'Sensor') then
     Result := Format('Sensor(%d,%s)', [Direccion, EstadoTxt])
   else if SameText(Tipo, 'Switch') or SameText(Tipo, 'Desvio') then
-    Result := Format('Switch(%d,%s)', [Direccion, EstadoTxt])
+    Result := Format('Switch(%s,%s)', [DireccionTexto, EstadoTxt])
   else if SameText(Tipo, 'RailCom') then
   begin
     if Estado then EstadoTxt := 'PRESENTE' else EstadoTxt := 'AUSENTE';
@@ -161,9 +172,14 @@ begin
     Result := Format('RailComEstado(%d,%s)', [Direccion, EstadoTxt]);
   end
   else if SameText(Tipo, 'RailComValido') or SameText(Tipo, 'RailComLocoValido') then
-    Result := Format('RailComLocoValido(%d)', [Direccion])
+  begin
+    if Estado then EstadoTxt := 'PRESENTE' else EstadoTxt := 'AUSENTE';
+    Result := Format('RailComLocoValido(%d,%s)', [Direccion, EstadoTxt]);
+  end
   else if SameText(Tipo, 'RailComDir') then
     Result := Format('RailComDir(%d,%d)', [Direccion, DCC])
+  else if SameText(Tipo, 'Cada') or SameText(Tipo, 'CadaIntervalo') then
+    Result := Format('Cada(%d,%d)', [Velocidad, DelayMax])
   else if SameText(Tipo, 'AlActivarGrupo') then
     Result := 'AlActivarGrupo'
   else if SameText(Tipo, 'AlDesactivarGrupo') then
@@ -175,7 +191,11 @@ begin
   else if SameText(Tipo, 'Funcion') then
     Result := Format('Funcion(%d,%d,%s)', [DCC, FuncNum, EstadoTxt])
   else if SameText(Tipo, 'Delay') then
-    Result := Format('Delay(%d)', [Velocidad])
+    Result := Format('Delay(%d,%d)', [Velocidad, DelayMax])
+  else if SameText(Tipo, 'Audio') or SameText(Tipo, 'ReproducirAudio') then
+  begin
+    if Grupo <> '' then Result := Format('Audio(%s,%d)', [Grupo, AudioVolume]);
+  end
   else if SameText(Tipo, 'ActivarGrupo') then
   begin
     if Grupo <> '' then Result := Format('ActivarGrupo(%s)', [Grupo]);
@@ -251,7 +271,9 @@ var
 begin
   if not Assigned(FMotor) then Exit;
 
-  FMotor.Clear;
+  // NO hacer FMotor.Clear aquí.
+  // El borrado debe hacerse antes, por ejemplo en RecargarDesdeVisualJSON.
+  // Así evitamos limpiar listas internas mientras el motor puede estar procesando.
 
   if not FileExists(FileName) then
   begin
@@ -268,8 +290,11 @@ begin
         if Data.JSONType = jtObject then
         begin
           RootObj := TJSONObject(Data);
-          if (RootObj.Find('grupos') = nil) or (RootObj.Find('grupos').JSONType <> jtArray) then
+
+          if (RootObj.Find('grupos') = nil) or
+             (RootObj.Find('grupos').JSONType <> jtArray) then
             Exit;
+
           GruposArr := RootObj.Arrays['grupos'];
         end
         else if Data.JSONType = jtArray then
@@ -279,18 +304,24 @@ begin
 
         for i := 0 to GruposArr.Count - 1 do
         begin
-          if GruposArr.Items[i].JSONType <> jtObject then Continue;
+          if GruposArr.Items[i].JSONType <> jtObject then
+            Continue;
+
           GrupoObj := TJSONObject(GruposArr.Items[i]);
 
           Nombre := Trim(GrupoObj.Get('nombre', ''));
           Activo := GrupoObj.Get('activo', False);
-          if Nombre = '' then Nombre := 'Grupo ' + IntToStr(i + 1);
+
+          if Nombre = '' then
+            Nombre := 'Grupo ' + IntToStr(i + 1);
 
           SL := TStringList.Create;
           try
-            if (GrupoObj.Find('reglas') <> nil) and (GrupoObj.Find('reglas').JSONType = jtArray) then
+            if (GrupoObj.Find('reglas') <> nil) and
+               (GrupoObj.Find('reglas').JSONType = jtArray) then
             begin
               ReglasArr := GrupoObj.Arrays['reglas'];
+
               for j := 0 to ReglasArr.Count - 1 do
               begin
                 if ReglasArr.Items[j].JSONType = jtObject then
@@ -345,8 +376,23 @@ begin
     Log('INIT: ClientLocoNet = NIL');
 end;
 
+procedure TFormAutomatismos.FormCloseQuery(Sender: TObject; var CanClose: Boolean);
+begin
+  if MotorEnEjecucion then
+  begin
+    CanClose := False;
+    ShowMessage('No se puede cerrar la ventana de automatismos mientras el motor esté en ejecución.' + LineEnding +
+                'Pulsa primero "Parar" desde la ventana de automatización visual.');
+  end
+  else
+    CanClose := True;
+end;
+
 procedure TFormAutomatismos.FormCreate(Sender: TObject);
 begin
+  FMotorEjecutando := False;
+  OnCloseQuery := @FormCloseQuery;
+
   FMotor := TMotorAutomatismos.Create(Self);
   FMotor.OnLog := @MotorLog;
   FMotor.OnEjecutarLocoVel := @MotorEjecutarLocoVel;
@@ -369,7 +415,20 @@ end;
 
 procedure TFormAutomatismos.PrepararModoEjecucion;
 begin
+  FMotorEjecutando := True;
+
   Caption := 'Ejecución de automatismos';
+
+  if Assigned(FMotor) then
+  begin
+    FMotor.OnLog := @MotorLog;
+    FMotor.OnEjecutarLocoVel := @MotorEjecutarLocoVel;
+    FMotor.OnEjecutarLocoDir := @MotorEjecutarLocoDir;
+    FMotor.OnEjecutarFuncion := @MotorEjecutarFuncion;
+
+    if Assigned(FControl) then
+      FMotor.Control := FControl;
+  end;
 
   if Assigned(MemoLog) then
   begin
@@ -388,18 +447,63 @@ end;
 
 procedure TFormAutomatismos.RecargarDesdeVisualJSON;
 begin
+  if Assigned(FMotor) then
+    FMotor.Clear;
+
   CargarGruposJSON(GetJSONFileName);
 end;
 
 procedure TFormAutomatismos.PararEjecucion;
 begin
+  FMotorEjecutando := False;
+
   if Assigned(FMotor) then
   begin
+    // Cortar acciones sobre la maqueta
     FMotor.Control := nil;
-    FMotor.Clear;
+
+    // Cortar eventos hacia este formulario.
+    // Así, aunque quede algún Delay/Cada pendiente, no ejecuta ni escribe log.
+    FMotor.OnLog := nil;
+    FMotor.OnEjecutarLocoVel := nil;
+    FMotor.OnEjecutarLocoDir := nil;
+    FMotor.OnEjecutarFuncion := nil;
+
+    // NO hacer FMotor.Clear aquí.
+    // Clear solo al recargar reglas antes de arrancar.
   end;
+
   Log('Procesamiento parado');
 end;
+
+function TFormAutomatismos.MotorEnEjecucion: Boolean;
+begin
+  Result := FMotorEjecutando;
+end;
+
+function TFormAutomatismos.ProbarAccionTexto(const TextoComando: string): Boolean;
+var
+  MotorPrueba: TMotorAutomatismos;
+begin
+  Result := False;
+
+  if Assigned(FMotor) then
+    FMotor.Control := nil;
+
+  MotorPrueba := TMotorAutomatismos.Create(nil);
+  try
+    MotorPrueba.OnLog := @MotorLog;
+    MotorPrueba.OnEjecutarLocoVel := @MotorEjecutarLocoVel;
+    MotorPrueba.OnEjecutarLocoDir := @MotorEjecutarLocoDir;
+    MotorPrueba.OnEjecutarFuncion := @MotorEjecutarFuncion;
+    MotorPrueba.Control := FControl;
+
+    Result := MotorPrueba.ProbarComandoTexto(TextoComando);
+  finally
+    MotorPrueba.Free;
+  end;
+end;
+
 
 procedure TFormAutomatismos.ActivarGrupoExterno(const Nombre: string);
 begin

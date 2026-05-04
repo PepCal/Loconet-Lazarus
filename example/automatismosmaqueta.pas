@@ -8,7 +8,8 @@ unit AutomatismosMaqueta;
 interface
 
 uses
-  Classes, SysUtils, fgl, ClientLocoNet, ControlMaqueta;
+  Classes, SysUtils, ExtCtrls, fgl, LCLIntf, ClientLocoNet, ControlMaqueta
+  {$IFDEF MSWINDOWS}, Windows, MMSystem{$ENDIF};
 
 const
   MAX_AUT_ADDR = 10239;
@@ -24,6 +25,7 @@ type
     tcRailComDireccion,
     tcRailComLocoValido,
     tcRailComDirActual,
+    tcCadaIntervalo,
     tcAlActivarGrupo,
     tcAlDesactivarGrupo
   );
@@ -36,7 +38,8 @@ type
     cmdFuncion,
     cmdActivarGrupo,
     cmdDesactivarGrupo,
-    cmdDelay
+    cmdDelay,
+    cmdAudio
   );
 
   TDCCSource = (
@@ -64,6 +67,10 @@ type
     DCC: Integer;        // RailCom / SensorDireccion / RailComDireccion
     Present: Boolean;    // RailCom PRESENTE/AUSENTE
     Dir: Integer;        // DirecciÃ³n 0/1
+    IntervalMinMs: Integer;
+    IntervalMaxMs: Integer;
+    NextFireMs: QWord;
+    procedure ResetIntervalo;
     constructor Create;
   end;
 
@@ -71,6 +78,7 @@ type
   public
     Tipo: TTipoComando;
     Addr: Integer;
+    AddrList: string;     // lista de direcciones para Switch: "1,2,3"
     EstadoBool: Boolean;
 
     DCCSource: TDCCSource;
@@ -82,18 +90,24 @@ type
     FuncNum: Integer;
     FuncState: Boolean;
     Grupo: string;
-    DelayMs: Integer;
+    DelayMs: Integer;      // compatibilidad: retardo mÃ­nimo
+    DelayMaxMs: Integer;   // retardo mÃ¡ximo
+    AudioFile: string;     // archivo de audio a reproducir
+    AudioVolume: Integer;  // volumen 0..100
     constructor Create;
   end;
 
   TListaCondiciones = specialize TFPGObjectList<TCondicionRegla>;
   TListaComandos = specialize TFPGObjectList<TComandoRegla>;
 
+  TGrupoAutomatismo = class;
+
   TReglaAutomatismo = class
   public
     Condiciones: TListaCondiciones;
     Comandos: TListaComandos;
     TextoOriginal: string;
+    GrupoPadre: TGrupoAutomatismo;
     EnEjecucion: Boolean;
     UltimoResultado: Boolean;
     constructor Create;
@@ -158,6 +172,12 @@ type
     FRailComInfo: array[0..MAX_AUT_ADDR] of TRailComInfo;
 
     FLocoListener: TMotorLocoListener;
+    FTimerEvaluacion: TTimer;
+
+    procedure TimerEvaluacion(Sender: TObject);
+    procedure ResetIntervalosGrupo(G: TGrupoAutomatismo);
+    function EvaluarCadaIntervalo(C: TCondicionRegla): Boolean;
+    function TiempoAleatorioIntervalo(AMin, AMax: Integer): Integer;
 
     procedure RequestDireccionSiNecesaria(DCC: Integer);
     procedure LocoNetDireccion(Addr: Integer; Dir: Integer);
@@ -168,6 +188,9 @@ type
     procedure HookRailCom(Sender: TObject; Sensor: Integer; DCC: Integer; Present: Boolean);
 
     procedure Log(const S: string);
+    procedure SetAudioVolume(AVolume: Integer);
+    procedure PlayAudioFile(const AFichero: string; AVolume: Integer);
+    procedure StopAudio;
 
     function ParseBoolONOFF(const S: string; out Value: Boolean): Boolean;
     function ParseBoolPresencia(const S: string; out Value: Boolean): Boolean;
@@ -181,6 +204,7 @@ type
     function ParseDCCArgument(const S: string; out Source: TDCCSource; out DCC, Sensor: Integer): Boolean;
 
     function FindGrupo(const Nombre: string): TGrupoAutomatismo;
+    function ReglaPuedeContinuar(Regla: TReglaAutomatismo): Boolean;
     procedure EjecutarComando(Cmd: TComandoRegla);
     procedure EjecutarSecuencia(Regla: TReglaAutomatismo; Comandos: TListaComandos; Index: Integer = 0);
 
@@ -210,6 +234,7 @@ type
     procedure DesactivarGrupo(const Nombre: string);
     function GrupoActivo(const Nombre: string): Boolean;
     function BorrarGrupo(const Nombre: string): Boolean;
+    function ProbarComandoTexto(const TextoComando: string): Boolean;
 
     property Grupos: TListaGrupos read FGrupos;
     property RailComInfo[Addr: Integer]: TRailComInfo read GetRailComInfo;
@@ -291,6 +316,14 @@ begin
   DCC := 0;
   Present := False;
   Dir := 0;
+  IntervalMinMs := 0;
+  IntervalMaxMs := 0;
+  NextFireMs := 0;
+end;
+
+procedure TCondicionRegla.ResetIntervalo;
+begin
+  NextFireMs := 0;
 end;
 
 { TComandoRegla }
@@ -299,6 +332,7 @@ constructor TComandoRegla.Create;
 begin
   Tipo := cmdNone;
   Addr := 0;
+  AddrList := '';
   EstadoBool := False;
   DCCSource := dsFixed;
   DCC := 0;
@@ -309,6 +343,9 @@ begin
   FuncState := False;
   Grupo := '';
   DelayMs := 0;
+  DelayMaxMs := 0;
+  AudioFile := '';
+  AudioVolume := 100;
 end;
 
 { TReglaAutomatismo }
@@ -317,6 +354,7 @@ constructor TReglaAutomatismo.Create;
 begin
   Condiciones := TListaCondiciones.Create(True);
   Comandos := TListaComandos.Create(True);
+  GrupoPadre := nil;
   EnEjecucion := False;
   UltimoResultado := False;
 end;
@@ -364,8 +402,10 @@ end;
 
 procedure TDelayThread.DoContinue;
 begin
-  if Assigned(FMotor) then
-    FMotor.EjecutarSecuencia(FRegla, FComandos, FIndex);
+  if Assigned(FMotor) and FMotor.ReglaPuedeContinuar(FRegla) then
+    FMotor.EjecutarSecuencia(FRegla, FComandos, FIndex)
+  else if Assigned(FRegla) then
+    FRegla.EnEjecucion := False;
 end;
 
 { TMotorAutomatismos }
@@ -487,10 +527,17 @@ begin
   FillChar(FRailComInfo, SizeOf(FRailComInfo), 0);
 
   FLocoListener := TMotorLocoListener.Create(Self);
+
+  FTimerEvaluacion := TTimer.Create(Self);
+  FTimerEvaluacion.Interval := 100;
+  FTimerEvaluacion.Enabled := True;
+  FTimerEvaluacion.OnTimer := @TimerEvaluacion;
 end;
 
 destructor TMotorAutomatismos.Destroy;
 begin
+  if Assigned(FTimerEvaluacion) then
+    FTimerEvaluacion.Enabled := False;
   if Assigned(FControl) and Assigned(FControl.LocoNet) and Assigned(FLocoListener) then
     FControl.LocoNet.RemoveListener(FLocoListener);
 
@@ -648,13 +695,37 @@ begin
     Result := True;
     Exit;
   end
+  else if StartsTextI('Cada(', Txt) then
+  begin
+    Args := SplitTopLevel(ExtractInsideParentheses(Txt), ',');
+    try
+      if (Args.Count < 1) or (Args.Count > 2) then Exit;
+      C.Tipo := tcCadaIntervalo;
+      C.IntervalMinMs := StrToIntDef(Trim(Args[0]), -1);
+      if Args.Count = 2 then
+        C.IntervalMaxMs := StrToIntDef(Trim(Args[1]), -1)
+      else
+        C.IntervalMaxMs := C.IntervalMinMs;
+      C.NextFireMs := 0;
+      Result := (C.IntervalMinMs >= 0) and (C.IntervalMaxMs >= C.IntervalMinMs);
+    finally
+      Args.Free;
+    end;
+  end
   else if StartsTextI('RailComLocoValido(', Txt) then
   begin
     Args := SplitTopLevel(ExtractInsideParentheses(Txt), ',');
     try
-      if Args.Count <> 1 then Exit;
+      // Formatos admitidos:
+      //   RailComLocoValido(sensor)           -> TRUE si hay presencia (compatibilidad)
+      //   RailComLocoValido(sensor,PRESENTE)  -> TRUE si hay presencia
+      //   RailComLocoValido(sensor,AUSENTE)   -> TRUE si no hay presencia
+      if (Args.Count < 1) or (Args.Count > 2) then Exit;
       C.Tipo := tcRailComLocoValido;
       C.Sensor := StrToIntDef(Trim(Args[0]), -1);
+      C.Present := True;
+      if Args.Count = 2 then
+        if not ParseBoolPresencia(Args[1], C.Present) then Exit;
       Result := SensorEnRango(C.Sensor);
     finally
       Args.Free;
@@ -825,12 +896,26 @@ begin
   begin
     Args := SplitTopLevel(ExtractInsideParentheses(Txt), ',');
     try
-      if Args.Count <> 2 then Exit;
+      // Formatos admitidos:
+      //   Switch(10,ON)
+      //   Switch(10,11,12,ON)
+      // La ultima posicion es el estado; las anteriores son direcciones.
+      if Args.Count < 2 then Exit;
+      if not ParseBoolONOFF(Args[Args.Count - 1], B) then Exit;
+
       Cmd.Tipo := cmdSwitch;
-      Cmd.Addr := StrToIntDef(Trim(Args[0]), -1);
-      if not SensorEnRango(Cmd.Addr) then Exit;
-      if not ParseBoolONOFF(Args[1], B) then Exit;
       Cmd.EstadoBool := B;
+      Cmd.AddrList := '';
+
+      for DCCValue := 0 to Args.Count - 2 do
+      begin
+        Sensor := StrToIntDef(Trim(Args[DCCValue]), -1);
+        if not SensorEnRango(Sensor) then Exit;
+        if Cmd.AddrList <> '' then Cmd.AddrList := Cmd.AddrList + ',';
+        Cmd.AddrList := Cmd.AddrList + IntToStr(Sensor);
+        if DCCValue = 0 then Cmd.Addr := Sensor;
+      end;
+
       Result := True;
     finally
       Args.Free;
@@ -911,11 +996,33 @@ begin
   begin
     Args := SplitTopLevel(ExtractInsideParentheses(Txt), ',');
     try
-      if Args.Count <> 1 then Exit;
+      if (Args.Count < 1) or (Args.Count > 2) then Exit;
       Cmd.Tipo := cmdDelay;
       Cmd.DelayMs := StrToIntDef(Trim(Args[0]), -1);
-      if Cmd.DelayMs < 0 then Exit;
+      if Args.Count = 2 then
+        Cmd.DelayMaxMs := StrToIntDef(Trim(Args[1]), -1)
+      else
+        Cmd.DelayMaxMs := Cmd.DelayMs;
+      if (Cmd.DelayMs < 0) or (Cmd.DelayMaxMs < 0) then Exit;
+      if Cmd.DelayMaxMs < Cmd.DelayMs then Exit;
       Result := True;
+    finally
+      Args.Free;
+    end;
+  end
+  else if StartsTextI('Audio(', Txt) or StartsTextI('ReproducirAudio(', Txt) then
+  begin
+    Args := SplitTopLevel(ExtractInsideParentheses(Txt), ',');
+    try
+      if (Args.Count < 1) or (Args.Count > 2) then Exit;
+      Cmd.Tipo := cmdAudio;
+      Cmd.AudioFile := StripQuotes(Args[0]);
+      Cmd.AudioVolume := 100;
+      if Args.Count = 2 then
+        Cmd.AudioVolume := StrToIntDef(Trim(Args[1]), 100);
+      if Cmd.AudioVolume < 0 then Cmd.AudioVolume := 0;
+      if Cmd.AudioVolume > 100 then Cmd.AudioVolume := 100;
+      Result := Trim(Cmd.AudioFile) <> '';
     finally
       Args.Free;
     end;
@@ -975,6 +1082,7 @@ begin
 
     R := TReglaAutomatismo.Create;
     try
+      R.GrupoPadre := Result;
       R.TextoOriginal := L;
 
       SLCond := SplitConditionsAND(ParteCond);
@@ -1028,6 +1136,89 @@ begin
   FGrupos.Clear;
 end;
 
+
+function TMotorAutomatismos.ProbarComandoTexto(const TextoComando: string): Boolean;
+var
+  Cmd: TComandoRegla;
+begin
+  Result := False;
+
+  if Trim(TextoComando) = '' then Exit;
+
+  Cmd := TComandoRegla.Create;
+  try
+    if not ParseComando(TextoComando, Cmd) then
+    begin
+      Log('PRUEBA accion no valida: ' + TextoComando);
+      Exit;
+    end;
+
+    if Cmd.Tipo = cmdDelay then
+    begin
+      Log('PRUEBA cancelada: Delay no se ejecuta como prueba aislada');
+      Exit;
+    end;
+
+    Log('PRUEBA accion: ' + TextoComando);
+    EjecutarComando(Cmd);
+    Result := True;
+  finally
+    Cmd.Free;
+  end;
+end;
+
+procedure TMotorAutomatismos.TimerEvaluacion(Sender: TObject);
+begin
+  EvaluarReglas;
+end;
+
+function TMotorAutomatismos.TiempoAleatorioIntervalo(AMin, AMax: Integer): Integer;
+begin
+  if AMax <= AMin then
+    Result := AMin
+  else
+    Result := AMin + Random(AMax - AMin + 1);
+end;
+
+function TMotorAutomatismos.EvaluarCadaIntervalo(C: TCondicionRegla): Boolean;
+var
+  Ahora: QWord;
+begin
+  Result := False;
+  if (C = nil) or (C.IntervalMinMs < 0) or (C.IntervalMaxMs < C.IntervalMinMs) then Exit;
+
+  Ahora := GetTickCount64;
+
+  // Primera evaluación tras activar/cargar el grupo: programa el primer disparo, no dispara.
+  if C.NextFireMs = 0 then
+  begin
+    C.NextFireMs := Ahora + QWord(TiempoAleatorioIntervalo(C.IntervalMinMs, C.IntervalMaxMs));
+    Exit(False);
+  end;
+
+  if Ahora >= C.NextFireMs then
+  begin
+    Result := True;
+    C.NextFireMs := Ahora + QWord(TiempoAleatorioIntervalo(C.IntervalMinMs, C.IntervalMaxMs));
+  end;
+end;
+
+procedure TMotorAutomatismos.ResetIntervalosGrupo(G: TGrupoAutomatismo);
+var
+  R: TReglaAutomatismo;
+  C: TCondicionRegla;
+begin
+  if not Assigned(G) then Exit;
+  for R in G.Reglas do
+  begin
+    R.EnEjecucion := False;
+    R.UltimoResultado := False;
+    for C in R.Condiciones do
+      if C.Tipo = tcCadaIntervalo then
+        C.ResetIntervalo;
+  end;
+end;
+
 procedure TMotorAutomatismos.ActivarGrupo(const Nombre: string);
 var
   G: TGrupoAutomatismo;
@@ -1057,6 +1248,7 @@ begin
     if G.Activo then
     begin
       G.Activo := False;
+      ResetIntervalosGrupo(G);
       Log('Desactivado grupo: ' + G.Nombre);
       EjecutarReglasAlDesactivarGrupo(G);
     end;
@@ -1145,13 +1337,45 @@ begin
   end;
 end;
 
+function TMotorAutomatismos.ReglaPuedeContinuar(Regla: TReglaAutomatismo): Boolean;
+var
+  C: TCondicionRegla;
+  EsReglaAlDesactivar: Boolean;
+begin
+  Result := False;
+  if (not Assigned(Regla)) or (not Assigned(Regla.GrupoPadre)) or (not Regla.EnEjecucion) then Exit;
+
+  if Regla.GrupoPadre.Activo then
+  begin
+    Result := True;
+    Exit;
+  end;
+
+  // Las reglas AlDesactivarGrupo deben poder terminar al desactivar el grupo.
+  // Las demas quedan canceladas, incluyendo Delay en curso.
+  EsReglaAlDesactivar := False;
+  for C in Regla.Condiciones do
+    if C.Tipo = tcAlDesactivarGrupo then
+    begin
+      EsReglaAlDesactivar := True;
+      Break;
+    end;
+
+  Result := EsReglaAlDesactivar;
+end;
+
 procedure TMotorAutomatismos.EjecutarSecuencia(Regla: TReglaAutomatismo;
   Comandos: TListaComandos; Index: Integer);
 var
   Cmd: TComandoRegla;
   Th: TDelayThread;
+  DelayRealMs: Integer;
 begin
-  if not Assigned(Regla) then Exit;
+  if not ReglaPuedeContinuar(Regla) then
+  begin
+    if Assigned(Regla) then Regla.EnEjecucion := False;
+    Exit;
+  end;
 
   if not Assigned(Comandos) then
   begin
@@ -1170,8 +1394,16 @@ begin
   case Cmd.Tipo of
     cmdDelay:
       begin
-        Log(Format('DELAY %d ms', [Cmd.DelayMs]));
-        Th := TDelayThread.Create(Self, Regla, Comandos, Index + 1, Cmd.DelayMs);
+        if Cmd.DelayMaxMs <= Cmd.DelayMs then
+          DelayRealMs := Cmd.DelayMs
+        else
+          DelayRealMs := Cmd.DelayMs + Random(Cmd.DelayMaxMs - Cmd.DelayMs + 1);
+
+        if Cmd.DelayMaxMs = Cmd.DelayMs then
+          Log(Format('DELAY %d ms', [DelayRealMs]))
+        else
+          Log(Format('DELAY %d ms intervalo [%d,%d]', [DelayRealMs, Cmd.DelayMs, Cmd.DelayMaxMs]));
+        Th := TDelayThread.Create(Self, Regla, Comandos, Index + 1, DelayRealMs);
         Th.Start;
       end;
   else
@@ -1180,6 +1412,54 @@ begin
       EjecutarSecuencia(Regla, Comandos, Index + 1);
     end;
   end;
+end;
+
+
+procedure TMotorAutomatismos.SetAudioVolume(AVolume: Integer);
+{$IFDEF MSWINDOWS}
+var
+  V: DWORD;
+{$ENDIF}
+begin
+  if AVolume < 0 then AVolume := 0;
+  if AVolume > 100 then AVolume := 100;
+
+  {$IFDEF MSWINDOWS}
+  V := Round($FFFF * (AVolume / 100));
+  waveOutSetVolume(0, (V shl 16) or V);
+  {$ENDIF}
+end;
+
+procedure TMotorAutomatismos.StopAudio;
+begin
+  {$IFDEF MSWINDOWS}
+  PlaySound(nil, 0, 0);
+  {$ENDIF}
+end;
+
+procedure TMotorAutomatismos.PlayAudioFile(const AFichero: string; AVolume: Integer);
+begin
+  if Trim(AFichero) = '' then Exit;
+
+  if not FileExists(AFichero) then
+  begin
+    Log('AUDIO cancelado: no existe el archivo ' + AFichero);
+    Exit;
+  end;
+
+  SetAudioVolume(AVolume);
+
+  {$IFDEF MSWINDOWS}
+  if SameText(ExtractFileExt(AFichero), '.wav') then
+  begin
+    StopAudio;
+    PlaySound(PChar(AFichero), 0, SND_ASYNC or SND_FILENAME);
+  end
+  else
+    OpenDocument(AFichero);
+  {$ELSE}
+  OpenDocument(AFichero);
+  {$ENDIF}
 end;
 
 function TMotorAutomatismos.ResolveDCC(Cmd: TComandoRegla; out DCC: Integer): Boolean;
@@ -1216,8 +1496,26 @@ begin
       begin
         if Assigned(FControl) then
         begin
-          Log(Format('SWITCH %d -> %s', [Cmd.Addr, BoolToStr(Cmd.EstadoBool, True)]));
-          FControl.SetSwitch(Cmd.Addr, Cmd.EstadoBool);
+          if Trim(Cmd.AddrList) = '' then
+          begin
+            Log(Format('SWITCH %d -> %s', [Cmd.Addr, BoolToStr(Cmd.EstadoBool, True)]));
+            FControl.SetSwitch(Cmd.Addr, Cmd.EstadoBool);
+          end
+          else
+          begin
+            with SplitTopLevel(Cmd.AddrList, ',') do
+            try
+              for DCCResuelto := 0 to Count - 1 do
+              begin
+                Cmd.Addr := StrToIntDef(Trim(Strings[DCCResuelto]), -1);
+                if not SensorEnRango(Cmd.Addr) then Continue;
+                Log(Format('SWITCH %d -> %s', [Cmd.Addr, BoolToStr(Cmd.EstadoBool, True)]));
+                FControl.SetSwitch(Cmd.Addr, Cmd.EstadoBool);
+              end;
+            finally
+              Free;
+            end;
+          end;
         end;
       end;
 
@@ -1279,7 +1577,14 @@ begin
       DesactivarGrupo(Cmd.Grupo);
 
     cmdDelay:
-      ; // no hace nada aquÃ­
+      ; // no hace nada aquí
+
+    cmdAudio:
+      begin
+        if Trim(Cmd.AudioFile) = '' then Exit;
+        Log(Format('AUDIO %s volumen %d%%', [Cmd.AudioFile, Cmd.AudioVolume]));
+        PlayAudioFile(Cmd.AudioFile, Cmd.AudioVolume);
+      end;
   end;
 end;
 
@@ -1326,18 +1631,30 @@ begin
                 (FRailComInfo[C.Sensor].Dir = C.Dir);
 
     tcRailComLocoValido:
-      // Condición de presencia física: no compara la dirección DCC.
-      // TRUE sólo si el último estado recibido para este RailCom indica
-      // una locomotora presente. Si el RailCom notifica ausencia, pasa a FALSE.
-      Result := SensorEnRango(C.Sensor) and
-                FRailComInfo[C.Sensor].HasCurrent and
-                FRailComInfo[C.Sensor].CurrentPresent and
-                (FRailComInfo[C.Sensor].CurrentDCC > 0);
+      begin
+        // Condiciï¿½n de presencia fï¿½sica: no compara la direcciï¿½n DCC.
+        // C.Present = True  -> TRUE si hay cualquier locomotora presente.
+        // C.Present = False -> TRUE si no hay locomotora presente.
+        //
+        // Importante: para AUSENTE no exigimos HasCurrent. Asï¿½ se comporta
+        // como un sensor normal en OFF: si no consta ninguna presencia vï¿½lida,
+        // la condiciï¿½n de ausencia es verdadera. Esto evita que una regla del
+        // tipo RailComLocoValido(1,AUSENTE) AND RailComLocoValido(2,AUSENTE)
+        // quede bloqueada al arrancar o si el RailCom no ha emitido todavï¿½a un
+        // telegrama explï¿½cito de ausencia.
+        Result := SensorEnRango(C.Sensor) and
+                  ((FRailComInfo[C.Sensor].HasCurrent and
+                    FRailComInfo[C.Sensor].CurrentPresent and
+                    (FRailComInfo[C.Sensor].CurrentDCC > 0)) = C.Present);
+      end;
 
     tcRailComDirActual:
       Result := SensorEnRango(C.Sensor) and
                 FRailComInfo[C.Sensor].HayDir and
                 (FRailComInfo[C.Sensor].Dir = C.Dir);
+
+    tcCadaIntervalo:
+      Result := EvaluarCadaIntervalo(C);
 
     tcAlActivarGrupo,
     tcAlDesactivarGrupo:
@@ -1390,7 +1707,11 @@ begin
   try
     for G in FGrupos do
     begin
-      if not G.Activo then Continue;
+      if not G.Activo then
+      begin
+        ResetIntervalosGrupo(G);
+        Continue;
+      end;
 
       for R in G.Reglas do
       begin
@@ -1437,8 +1758,8 @@ begin
   end
   else
   begin
-    // El RailCom queda vacío o sin DCC válido: no debe conservarse
-    // la última locomotora como si siguiera presente.
+    // El RailCom queda vacï¿½o o sin DCC vï¿½lido: no debe conservarse
+    // la ï¿½ltima locomotora como si siguiera presente.
     FRailComInfo[Sensor].Loco := 0;
     FRailComInfo[Sensor].HayLoco := False;
     FRailComInfo[Sensor].Dir := 0;
@@ -1485,5 +1806,8 @@ begin
   ActualizarRailComInfo(Sensor, DCC, Present);
   EvaluarReglas;
 end;
+
+initialization
+  Randomize;
 
 end.
